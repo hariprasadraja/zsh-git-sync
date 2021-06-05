@@ -2,6 +2,9 @@
 
 Sync git repositories and clean them up.
 
+Modified version of [git-extras/git-sync](https://github.com/tj/git-extras/blob/master/bin/git-sync)
+
+
 ![a gif showing git-sync in action](/git-sync.mov.gif)
 
 ## Define `sync`
