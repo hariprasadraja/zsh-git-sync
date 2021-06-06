@@ -52,7 +52,7 @@ _merge_locally() {
   branch="$2"
   _log "Merging $remote/$branch locally..."
   git stash
-  git merge --no-edit --rebase "$remote/$branch" | _prefixed
+  git merge --no-edit --summary --progress "$remote/$branch" | _prefixed
   git stash pop
 }
 
@@ -61,10 +61,8 @@ _push_to_fork() {
   local branch remote
   remote="$1"
   branch="$2"
-  if ! [ "$remote" = "origin" ]; then
-    _log "Pushing it to origin/$branch..."
-    git push origin "$branch" | _prefixed
-  fi
+  _log "Pushing it to $remote/$branch..."
+  git push "$remote" "$branch" | _prefixed
 }
 
 git-delete-local-merged() {
@@ -102,7 +100,7 @@ git-sync() {
       elif [ "${branch}" = "" ]; then
         local branch="$1"
       else
-        echo -e "Error: too many arguments.\n"
+        _log "Error: too many arguments.\n"
         _usage
         exit 1
       fi
@@ -113,13 +111,13 @@ git-sync() {
 
   if [ "${remote}" = "" ]; then
     if ! remote_branch="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)"; then
-      echo "There is no upstream information of local branch."
+      _log "There is no upstream information of local branch."
       exit 1
     fi
     local branch="$(git rev-parse --abbrev-ref --symbolic-full-name @)"
     local remote=$(git config "branch.${branch}.remote")
   elif [ "${branch}" = "" ]; then
-    echo -e "Error: too few arguments.\n"
+    _log "Error: too few arguments.\n"
     _usage
     exit 1
   fi
@@ -145,7 +143,7 @@ git-sync() {
   if [ $head = $remotehead ]; then
     # Local and the Remote References are Identical
     _log "Already Updated"
-  elif [ $LOCAL = $BASE ]; then
+  elif [ $head = $base ]; then
     # Got New References from Remote
     _log "Need to Merge"
 
@@ -156,9 +154,9 @@ git-sync() {
     fi
 
     _merge_locally "$remote" "$branch"
-    _push_to_fork "$remote" "$branch"
+  fi
 
-  elif [ $REMOTE = $BASE ]; then
+  if [ $remotehead = $base ]; then
     _log "found new commits in local branch"
     _push_to_fork "$remote" "$branch"
   else
