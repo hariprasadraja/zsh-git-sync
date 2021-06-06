@@ -65,7 +65,7 @@ git-delete-local-merged() {
 
 # shellcheck disable=SC2039
 git-sync() {
-  currentBranch=$(git branch --show-current)
+  currentBranch=$(git branch --show-current) && git stash
   local remotes=()
   for branch in $(git for-each-ref --format='%(refname:lstrip=2)' refs/heads/); do
     # check if upstream branch exist or not
@@ -114,7 +114,7 @@ git-sync() {
 
   done
 
-  git switch $currentBranch
+  git switch $currentBranch && git stash pop
   git-delete-local-merged
   _log "All done!"
 }
