@@ -2,9 +2,9 @@
 
 Sync git repositories and clean them up.
 
-Modified version of [git-extras/git-sync](https://github.com/tj/git-extras/blob/master/bin/git-sync)
+Modified version of [git-extras/git-sync](https://github.com/tj/git-extras/blob/master/bin/git-sync) and [caarlos0-graveyard/zsh-git-sync](https://github.com/caarlos0-graveyard/zsh-git-sync)
 
-** Updates all your local branches with the remote branch **
+**Updates all your local branches with the corresponding remote branch**
 
 
 ```sh
