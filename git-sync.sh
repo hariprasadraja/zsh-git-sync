@@ -1,25 +1,5 @@
 #!/bin/sh
 
-function _usage() {
-  local command="git sync"
-  cat <<EOS
-Usage:
-  ${command} [<remote> <branch>]
-  ${command} -h | --help
-  ${command} -s | --soft
-Sync local branch with <remote>/<branch>.
-When <remote> and <branch> are not specified on the command line, upstream of local branch will be used by default.
-All changes and untracked files and directories will be removed unless you add -s(--soft).
-Examples:
-  Sync with upstream of local branch:
-    ${command}
-  Sync with origin/master:
-    ${command} origin master
-  Sync without cleaning untracked files:
-    ${command} -s
-EOS
-}
-
 _log() {
   echo "-----> $*"
 }
@@ -85,86 +65,52 @@ git-delete-local-merged() {
 
 # shellcheck disable=SC2039
 git-sync() {
-  while [ "$1" != "" ]; do
-    case $1 in
-    -h | --help)
-      _usage
-      exit
-      ;;
-    -s | --soft)
-      local soft="true"
-      ;;
-    *)
-      if [ "${remote}" = "" ]; then
-        local remote="$1"
-      elif [ "${branch}" = "" ]; then
-        local branch="$1"
-      else
-        _log "Error: too many arguments.\n"
-        _usage
-        exit 1
-      fi
-      ;;
-    esac
-    shift
-  done
-
-  if [ "${remote}" = "" ]; then
-    if ! remote_branch="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)"; then
-      _log "There is no upstream information of local branch."
-      exit 1
-    fi
-    local branch="$(git rev-parse --abbrev-ref --symbolic-full-name @)"
-    local remote=$(git config "branch.${branch}.remote")
-  elif [ "${branch}" = "" ]; then
-    _log "Error: too few arguments.\n"
-    _usage
-    exit 1
-  fi
-
-  # shellcheck disable=SC2039
-  _prune "$remote"
-  _update "$remote"
-
-  local head remotehead base
-
-  # @ - Head commit
-  # @{u} - Head commit on the remote branch
-
-  # LOCAL points to the most recent commit made on the local branch
-  head=$(git rev-parse @)
-
-  # Remote points to the most recent commit made on the Remote branch
-  remotehead=$(git rev-parse @{u})
-
-  # common parrent commit for both the references
-  base=$(git merge-base @ @{u})
-
-  if [ $head = $remotehead ]; then
-    # Local and the Remote References are Identical
-    _log "Already Updated"
-  elif [ $head = $base ]; then
-    # Got New References from Remote
-    _log "Need to Merge"
-
+  currentBranch=$(git branch --show-current)
+  for branch in $(git for-each-ref --format='%(refname:lstrip=2)' refs/heads/); do
     # check if upstream branch exist or not
     if ! remote_branch="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)"; then
-      _log "There is no upstream information of local branch. skipping Merge"
-      exit 1
+      _log "There is no upstream information of local branch. skipping Sync"
+      continue
     fi
 
-    _merge_locally "$remote" "$branch"
-  fi
+    local remote=$(git config "branch.${branch}.remote")
+    _prune "$remote"
+    _update "$remote"
 
-  if [ $remotehead = $base ]; then
-    _log "found new commits in local branch"
-    _push_to_fork "$remote" "$branch"
-  else
-    _log "Conflict: branch is diverged. fix it ASAP!"
-    exit 1
-  fi
+    _log "Synchronizing $branch to $remote/$branch..."
+    git switch $branch
 
-  git branch -u "$remote/$branch"
+    local head remotehead base
+
+    # @ - Head commit
+    # @{u} - Head commit on the remote branch
+    # LOCAL points to the most recent commit made on the local branch
+    head=$(git rev-parse @)
+    # Remote points to the most recent commit made on the Remote branch
+    remotehead=$(git rev-parse @{u})
+    # common parrent commit for both the references
+    base=$(git merge-base @ @{u})
+
+    if [ $head = $remotehead ]; then
+      # Local and the Remote References are Identical
+      _log "Already Updated"
+
+    elif [ $head = $base ]; then
+      # Got New References from Remote
+      _merge_locally "$remote" "$branch"
+    fi
+
+    if [ $remotehead = $base ]; then
+      _push_to_fork "$remote" "$branch"
+      git branch -u "$remote/$branch"
+    else
+      _log "Conflict: branch is diverged. fix it ASAP!"
+      continue
+    fi
+
+  done
+
+  git switch $currentBranch
   git-delete-local-merged
   _log "All done!"
 }
