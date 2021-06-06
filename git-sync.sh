@@ -40,8 +40,8 @@ _update() {
   # shellcheck disable=SC2039
   local remote
   remote="$1"
-  _log "Pruning $remote..."
-  git fetch --all "$remote" | _prefixed
+  _log "Updating $remote..."
+  git fetch "$remote" | _prefixed
   git fetch -t "$remote" | _prefixed
 }
 
