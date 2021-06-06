@@ -66,6 +66,7 @@ git-delete-local-merged() {
 # shellcheck disable=SC2039
 git-sync() {
   currentBranch=$(git branch --show-current)
+  local remotes=()
   for branch in $(git for-each-ref --format='%(refname:lstrip=2)' refs/heads/); do
     # check if upstream branch exist or not
     if ! remote_branch="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)"; then
@@ -74,8 +75,11 @@ git-sync() {
     fi
 
     local remote=$(git config "branch.${branch}.remote")
-    _prune "$remote"
-    _update "$remote"
+    if [ "$remotes["$remote"]" != true ]; then
+      _prune "$remote"
+      _update "$remote"
+      remotes["$remote"]=true
+    fi
 
     _log "Synchronizing $branch to $remote/$branch..."
     git switch $branch
