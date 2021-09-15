@@ -1,7 +1,11 @@
 #!/bin/sh
 
 _log() {
-  echo "-----> $*"
+  util log info "$*"
+}
+
+_err() {
+  util log error "$*"
 }
 
 _prefixed() {
@@ -31,9 +35,10 @@ _merge_locally() {
   remote="$1"
   branch="$2"
   _log "Merging $remote/$branch locally..."
-  git stash
   git merge --no-edit --summary --progress "$remote/$branch" | _prefixed
-  git stash pop
+  if [[ $? != 0 ]]; then
+    git merge --abort
+  fi
 }
 
 _push_to_fork() {
@@ -42,7 +47,8 @@ _push_to_fork() {
   remote="$1"
   branch="$2"
   _log "Pushing it to $remote/$branch..."
-  git push "$remote" "$branch" | _prefixed
+  git push -u -v "$remote" "$branch" | _prefixed
+  git push --tags -v "$remote" "$branch" | _prefixed
 }
 
 git-delete-local-merged() {
@@ -63,9 +69,38 @@ git-delete-local-merged() {
   done
 }
 
+git-require_clean_work_tree () {
+    # Update the index
+    git update-index -q --ignore-submodules --refresh
+    err=0
+
+    # Disallow unstaged changes in the working tree
+    if ! git diff-files --quiet --ignore-submodules --
+    then
+        _err "cannot $1: you have unstaged changes."
+        git diff-files --name-status -r --ignore-submodules -- >&2
+        err=1
+    fi
+
+    # Disallow uncommitted changes in the index
+    if ! git diff-index --cached --quiet HEAD --ignore-submodules --
+    then
+        _err "cannot $1: your index contains uncommitted changes."
+        git diff-index --cached --name-status -r --ignore-submodules HEAD -- >&2
+        err=1
+    fi
+
+    if [ $err = 1 ]
+    then
+        _err "Please commit or stash them."
+        exit 1
+    fi
+}
+
 # shellcheck disable=SC2039
 git-sync() {
-  currentBranch=$(git branch --show-current) && git stash
+  git-require_clean_work_tree
+  currentBranch=$(git branch --show-current)
   local remotes=()
   for branch in $(git for-each-ref --format='%(refname:lstrip=2)' refs/heads/); do
     # check if upstream branch exist or not
@@ -75,10 +110,18 @@ git-sync() {
     fi
 
     local remote=$(git config "branch.${branch}.remote")
-    if [ "$remotes["$remote"]" != true ]; then
+    exists=false
+    for item in ${remotes[@]}; do
+      if [ "$item" == "$remote" ]; then
+        exists=true
+      fi
+    done
+
+    if [ $exists == false ]; then
+      _log "New Remote: $remote"
       _prune "$remote"
       _update "$remote"
-      remotes["$remote"]=true
+      remotes+=($remote)
     fi
 
     _log "Synchronizing $branch to $remote/$branch..."
@@ -98,23 +141,24 @@ git-sync() {
     if [ $head = $remotehead ]; then
       # Local and the Remote References are Identical
       _log "Already Updated"
+      continue
+    fi
 
-    elif [ $head = $base ]; then
+    if [ $head = $base ]; then
       # Got New References from Remote
       _merge_locally "$remote" "$branch"
     fi
 
     if [ $remotehead = $base ]; then
       _push_to_fork "$remote" "$branch"
-      git branch -u "$remote/$branch"
     else
-      _log "Conflict: branch is diverged. fix it ASAP!"
+      _log "Conflict: $remote/branch is diverged. Skiping merge. Resolve it ASAP!"
       continue
     fi
 
   done
 
-  git switch $currentBranch && git stash pop
+  git switch $currentBranch
   git-delete-local-merged
   _log "All done!"
 }
