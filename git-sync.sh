@@ -103,13 +103,22 @@ git-sync() {
   currentBranch=$(git branch --show-current)
   local remotes=()
   for branch in $(git for-each-ref --format='%(refname:lstrip=2)' refs/heads/); do
-    # check if upstream branch exist or not
-    if ! remote_branch="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)"; then
-      _log "There is no upstream information of local branch. skipping Sync"
+    git switch $branch
+
+    local remote=$(git config "branch.${branch}.remote")
+
+    # check remote branch is set or not
+    if [ -z $remote ]; then
+        _err "remote repository (i.e origin) is not set for $branch. skipping Sync"
+        continue
+
+    # check if the upstread branch exist or not
+    elif ! remote_branch="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)"; then
+      _log "There is no upstream information for ${branch}. skipping Sync"
       continue
     fi
 
-    local remote=$(git config "branch.${branch}.remote")
+
     exists=false
     for item in ${remotes[@]}; do
       if [ "$item" == "$remote" ]; then
@@ -117,6 +126,7 @@ git-sync() {
       fi
     done
 
+    # try updating the remotes and find the remote branch exist or not
     if [ $exists == false ]; then
       _log "New Remote: $remote"
       _prune "$remote"
@@ -125,8 +135,6 @@ git-sync() {
     fi
 
     _log "Synchronizing $branch to $remote/$branch..."
-    git switch $branch
-
     local head remotehead base
 
     # @ - Head commit
@@ -152,7 +160,7 @@ git-sync() {
     if [ $remotehead = $base ]; then
       _push_to_fork "$remote" "$branch"
     else
-      _log "Conflict: $remote/branch is diverged. Skiping merge. Resolve it ASAP!"
+      _log "Conflict: $remote/$branch is diverged. Skiping merge. Resolve it ASAP!"
       continue
     fi
 
